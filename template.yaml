@@ -1,0 +1,208 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Quickstart your Websocket project with this SAM template that utilizes Websocket from Amazon API Gateway as a base communication for asynchronous application.
+
+Parameters:
+    TableName:
+      Type: String
+      Default: 'websocket_connections'
+      Description: (Required) The name of the new DynamoDB to store connection identifiers for each connected clients. 
+    StageName:
+      Type: String
+      Default: 'prod'
+      Description: (Required) Stage name for websocket API gateway
+
+Resources:
+  QuickstartWebsocketAPI:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: QuickstartWebsocketAPI
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: "$request.body.message"
+     
+  RouteConnect:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref QuickstartWebsocketAPI
+      RouteKey: $connect
+      AuthorizationType: NONE
+      OperationName: RouteConnect
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref IntegrationConnect
+
+  IntegrationConnect:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref QuickstartWebsocketAPI
+      Description: Connect Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: 
+        Fn::Sub:
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionOnConnect.Arn}/invocations
+
+  FunctionOnConnect:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./onConnect
+      Handler: main.handler
+      MemorySize: 256
+      Runtime: python3.6
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TableName
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref TableName
+
+  PermissionOnConnect:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - QuickstartWebsocketAPI
+      - FunctionOnConnect
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref FunctionOnConnect
+      Principal: apigateway.amazonaws.com
+
+  RouteDisconnect:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref QuickstartWebsocketAPI
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      OperationName: RouteDisconnect
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref IntegrationDisconnect
+
+  IntegrationDisconnect:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref QuickstartWebsocketAPI
+      Description: Disconnect Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: 
+        Fn::Sub:
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionOnDisconnect.Arn}/invocations
+
+  FunctionOnDisconnect:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./onDisconnect
+      Handler: main.handler
+      MemorySize: 256
+      Runtime: python3.6
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TableName
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref TableName
+
+  PermissionOnDisconnect:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - QuickstartWebsocketAPI
+      - FunctionOnDisconnect
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref FunctionOnDisconnect
+      Principal: apigateway.amazonaws.com
+
+  RouteMessage:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref QuickstartWebsocketAPI
+      RouteKey: request
+      AuthorizationType: NONE
+      OperationName: RouteMessage
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref IntegrationMessage
+
+  IntegrationMessage:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref QuickstartWebsocketAPI
+      Description: Message Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: 
+        Fn::Sub:
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionMessage.Arn}/invocations
+
+  FunctionMessage:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./onMessage
+      Handler: main.handler
+      MemorySize: 256
+      Runtime: python3.6 
+      Environment:
+        Variables:
+                WS_ENDPOINT: !Join [ '', [ !Sub 'https://${QuickstartWebsocketAPI}.execute-api.${AWS::Region}.amazonaws.com/',!Ref 'StageName'] ]
+      Policies:
+      - AWSLambdaExecute
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+            - 'execute-api:Invoke'
+            - 'execute-api:ManageConnections'
+          Resource:
+            - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${QuickstartWebsocketAPI}/*'
+        
+  PermissionMessage:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - QuickstartWebsocketAPI
+      - FunctionMessage
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref FunctionMessage
+      Principal: apigateway.amazonaws.com
+
+  Deployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+    - RouteConnect
+    - RouteDisconnect
+    - RouteMessage
+    Properties:
+      ApiId: !Ref QuickstartWebsocketAPI
+
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      StageName: !Ref StageName
+      Description: Prod Stage
+      DeploymentId: !Ref Deployment
+      ApiId: !Ref QuickstartWebsocketAPI
+
+  ConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+      - AttributeName: "connectionID"
+        AttributeType: "S"
+      KeySchema:
+      - AttributeName: "connectionID"
+        KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      SSESpecification:
+        SSEEnabled: True
+      TableName: !Ref TableName
+
+Outputs:
+  ConnectionsTableArn:
+    Description: "Connections table ARN"
+    Value: !GetAtt ConnectionsTable.Arn
+
+  WebSocketURI:
+    Description: "The WSS Protocol URI to connect to"
+    Value: !Join [ '', [ 'wss://', !Ref QuickstartWebsocketAPI, '.execute-api.',!Ref 'AWS::Region','.amazonaws.com/',!Ref 'Stage'] ]
