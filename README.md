@@ -29,10 +29,10 @@ aws cloudformation describe-stacks --stack-name QuickstartWebsocket --query 'Sta
 2. Connect to the WebSocket URI by using [wscat](https://github.com/websockets/wscat) tool. 
 3. Test the app by sending message
 ```json
-{'message':'request','text':'hello'}
+{"message":"request","text":"hello world"}
 ```
 
-If everything works well, you'll get the response "Okay", regardless of the 'text' you send. 
+If everything works well, WebSocket will return what you set as "text" value.
 
 ## Few Inspirations for You
 Going forward, you can use this repo for:
