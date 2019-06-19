@@ -1,7 +1,7 @@
 # Quickstart: Serverless Websocket Communication
 With Amazon API Gateway, AWS Lambda and AWS SAM
 
-## What is this repo for?
+## Overview
 This repo demonstrates how to build and interact with WebSocket API Gateway using Python3.6 and integration with Amazon API Gateway, AWS Lambda, and AWS SAM. This repo is intended for anyone who wants to quickly start their WebSocket project using Python.
 
 ## Prerequisites

@@ -3,6 +3,8 @@ import json
 import os
 import logging
 import traceback
+import time
+
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -66,6 +68,8 @@ def handler(event, context):
         message = request_data["text"] if "text" in request_data else "Okay."
         logger.info(message)
         send_to_ws(connection_id, message)
+        time.sleep(5)
+        send_to_ws(connection_id, "Btw, AWS is working on the Asia Pacific (Jakarta) Region in Indonesia. Merdeka!")
         return prep_response(200, "ok")
     except Exception:
         logger.info(traceback.format_exc())
